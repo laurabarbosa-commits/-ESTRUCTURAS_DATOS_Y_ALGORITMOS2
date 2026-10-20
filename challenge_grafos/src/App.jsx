@@ -1,6 +1,4 @@
 import { useState } from "react";
-import { Graph as D3Graph } from "react-d3-graph";
-
 
 class PersonNode {
   constructor(name, age, city) {
@@ -34,29 +32,12 @@ class Graph {
   addPerson(name, age, cityName) {
     const person = new PersonNode(name, age, cityName);
     this.people.push(person);
-
-    this.edges.push({
-      source: person.id,
-      target: `city-${cityName}`,
-    });
-
+    this.edges.push({ source: person.id, target: `city-${cityName}` });
     return person;
   }
 
-
   getPeopleInCity(cityName) {
     return this.people.filter((p) => p.city === cityName);
-  }
-
-  toD3Format() {
-    const nodes = [
-      ...this.cities.map((c) => ({ id: c.id, label: c.name, color: "#3b5bdb" })),
-      ...this.people.map((p) => ({ id: p.id, label: `${p.name} (${p.age})`, color: "#51cf66" })),
-    ];
-
-    const links = this.edges.map((e) => ({ source: e.source, target: e.target }));
-
-    return { nodes, links };
   }
 }
 
@@ -78,31 +59,95 @@ function buildGraph() {
 
 const graph = buildGraph();
 
-
 console.log("Personas en Bogotá:", graph.getPeopleInCity("Bogotá"));
 
-const graphConfig = {
-  nodeHighlightBehavior: true,
-  directed: false,
-  height: 500,
-  width: 800,
-  node: {
-    color: "#51cf66",
-    size: 400,
-    highlightStrokeColor: "blue",
-    labelProperty: "label",
-    fontSize: 12,
-  },
-  link: {
-    highlightColor: "lightblue",
-  },
-};
+function buildPositions(graph) {
+  const positions = {};
+  const width = 800;
+  const citySpacing = width / (graph.cities.length + 1);
+
+  // Ciudades en fila de arriba
+  graph.cities.forEach((city, i) => {
+    positions[city.id] = { x: citySpacing * (i + 1), y: 100 };
+  });
+
+  // Personas en fila de abajo, agrupadas bajo su ciudad
+  const peopleByCity = {};
+  graph.people.forEach((p) => {
+    if (!peopleByCity[p.city]) peopleByCity[p.city] = [];
+    peopleByCity[p.city].push(p);
+  });
+
+  graph.cities.forEach((city, cityIndex) => {
+    const peopleHere = peopleByCity[city.name] || [];
+    const baseX = citySpacing * (cityIndex + 1);
+    peopleHere.forEach((person, i) => {
+      const offset = (i - (peopleHere.length - 1) / 2) * 90;
+      positions[person.id] = { x: baseX + offset, y: 320 };
+    });
+  });
+
+  return positions;
+}
+
+function GraphView({ graph }) {
+  const positions = buildPositions(graph);
+
+  return (
+    <svg width="800" height="420" style={{ border: "1px solid #ccc", backgroundColor: "#1e1e2f" }}>
+      {/* Líneas (edges) */}
+      {graph.edges.map((edge, i) => {
+        const from = positions[edge.source];
+        const to = positions[edge.target];
+        if (!from || !to) return null;
+        return (
+          <line
+            key={i}
+            x1={from.x}
+            y1={from.y}
+            x2={to.x}
+            y2={to.y}
+            stroke="#888"
+            strokeWidth="2"
+          />
+        );
+      })}
+
+      {/* Nodos de ciudades */}
+      {graph.cities.map((city) => {
+        const pos = positions[city.id];
+        return (
+          <g key={city.id}>
+            <circle cx={pos.x} cy={pos.y} r="28" fill="#3b5bdb" />
+            <text x={pos.x} y={pos.y + 5} textAnchor="middle" fill="white" fontSize="13">
+              {city.name}
+            </text>
+          </g>
+        );
+      })}
+
+      {/* Nodos de personas */}
+      {graph.people.map((person) => {
+        const pos = positions[person.id];
+        return (
+          <g key={person.id}>
+            <circle cx={pos.x} cy={pos.y} r="24" fill="#51cf66" />
+            <text x={pos.x} y={pos.y} textAnchor="middle" fill="white" fontSize="11">
+              {person.name}
+            </text>
+            <text x={pos.x} y={pos.y + 14} textAnchor="middle" fill="white" fontSize="10">
+              {person.age}
+            </text>
+          </g>
+        );
+      })}
+    </svg>
+  );
+}
 
 function App() {
   const [selectedCity, setSelectedCity] = useState("Bogotá");
-
   const peopleInCity = graph.getPeopleInCity(selectedCity);
-  const graphData = graph.toD3Format();
 
   return (
     <div style={{ padding: "2rem", fontFamily: "Arial, sans-serif" }}>
@@ -131,9 +176,7 @@ function App() {
         </ul>
       </div>
 
-      <div style={{ border: "1px solid #ccc" }}>
-        <D3Graph id="friends-cities-graph" data={graphData} config={graphConfig} />
-      </div>
+      <GraphView graph={graph} />
     </div>
   );
 }
